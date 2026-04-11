@@ -1,6 +1,10 @@
 import FirecrawlApp from '@mendable/firecrawl-js'
 
-const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY! })
+let _firecrawl: FirecrawlApp | null = null
+function getFirecrawl() {
+  if (!_firecrawl) _firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY! })
+  return _firecrawl
+}
 
 export interface ScrapeResult {
   success: boolean
@@ -10,7 +14,7 @@ export interface ScrapeResult {
 
 export async function scrapeUrl(url: string): Promise<ScrapeResult> {
   try {
-    const result = await firecrawl.scrape(url, { formats: ['markdown'] })
+    const result = await getFirecrawl().scrape(url, { formats: ['markdown'] })
     const markdown = (result as { markdown?: string }).markdown
     if (!markdown) return { success: false, error: 'No content returned from scrape' }
     return { success: true, markdown }
@@ -35,7 +39,7 @@ export async function scrapeReviews(
 
   try {
     // Search for review pages
-    const searchResult = await firecrawl.search(query, {
+    const searchResult = await getFirecrawl().search(query, {
       limit: 5,
       scrapeOptions: { formats: ['markdown'] },
     })
