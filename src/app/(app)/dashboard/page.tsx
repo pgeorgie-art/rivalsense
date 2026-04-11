@@ -7,8 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Bell, Plus, GitCompareArrows, FileText, TrendingUp, ArrowRight } from 'lucide-react'
+import { Bell, Plus, GitCompareArrows, FileText, ArrowRight } from 'lucide-react'
 
 function getPricingPositionLabel(pos: string | null) {
   if (pos === 'below_market') return { label: 'Below market', variant: 'secondary' as const, className: 'text-blue-400 border-blue-400/30 bg-blue-400/10' }
@@ -78,7 +77,9 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
 
   const alertCompetitorIds = new Set((alerts ?? []).map(a => a.competitor_id))
-  const hasData = insightMap.size > 0
+
+  // No insights yet — send user back to the pipeline/analysis screen
+  if (insightMap.size === 0) redirect('/onboarding/step-3')
 
   function detectCurrency(insights: Map<string, { parsed_pricing?: unknown }>): string {
     for (const insight of insights.values()) {
@@ -113,22 +114,18 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {hasData && (
-            <>
-              <Link href="/compare">
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <GitCompareArrows className="w-4 h-4" />
-                  Compare
-                </Button>
-              </Link>
-              <Link href="/report">
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <FileText className="w-4 h-4" />
-                  Report
-                </Button>
-              </Link>
-            </>
-          )}
+          <Link href="/compare">
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <GitCompareArrows className="w-4 h-4" />
+              Compare
+            </Button>
+          </Link>
+          <Link href="/report">
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <FileText className="w-4 h-4" />
+              Report
+            </Button>
+          </Link>
           {competitors.length < 5 && (
             <Link href="/settings">
               <Button size="sm" className="gap-1.5">
@@ -157,28 +154,7 @@ export default async function DashboardPage() {
         </Alert>
       )}
 
-      {!hasData ? (
-        <Card className="text-center py-12">
-          <CardContent className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center">
-              <TrendingUp className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-foreground mb-1">Analysis in progress</h2>
-              <p className="text-muted-foreground text-sm">
-                Your competitors are being analysed. This can take a few minutes.
-              </p>
-            </div>
-            <Link href="/onboarding/step-3">
-              <Button className="gap-2">
-                Check progress
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
+      <>
           {/* Your business card */}
           <Card className="border-primary/20 bg-gradient-to-r from-primary/10 to-card">
             <CardContent className="pt-5">
@@ -297,8 +273,7 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           )}
-        </>
-      )}
+      </>
     </div>
   )
 }
