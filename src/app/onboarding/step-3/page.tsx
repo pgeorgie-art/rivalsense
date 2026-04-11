@@ -1,105 +1,138 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
-import {
-  CheckCircle2, AlertCircle, RefreshCw,
-  Search, Brain, BarChart2, Sparkles, Globe, ShieldCheck,
-} from 'lucide-react'
+import { CheckCircle2, AlertCircle, RefreshCw, Clock, Loader2, Globe } from 'lucide-react'
 
-const PIPELINE_STEPS = [
-  { icon: Globe,      text: 'Scraping your business website…' },
-  { icon: Search,     text: 'Analysing competitor websites…' },
-  { icon: Brain,      text: 'Running AI competitive analysis…' },
-  { icon: BarChart2,  text: 'Computing Market Positioning Scores…' },
-  { icon: Sparkles,   text: 'Building your intelligence dashboard…' },
-]
-
-type Phase = 'pipeline' | 'verifying' | 'done' | 'error'
+interface CompetitorStatus {
+  id: string
+  url: string
+  name: string | null
+  scrapeStatus: 'pending' | 'scraping' | 'analysing' | 'done' | 'failed'
+}
 
 export default function OnboardingStep3() {
   const router = useRouter()
-  const [stepIdx, setStepIdx] = useState(0)
-  const [phase, setPhase] = useState<Phase>('pipeline')
+  const [competitors, setCompetitors] = useState<CompetitorStatus[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [verifiedCount, setVerifiedCount] = useState(0)
-  const [totalCount, setTotalCount] = useState(0)
+  const [done, setDone] = useState(false)
+  const pipelineStarted = useRef(false)
 
   useEffect(() => {
-    // Cycle through pipeline step labels every 8s
-    const labelInterval = setInterval(() => {
-      setStepIdx(prev => Math.min(prev + 1, PIPELINE_STEPS.length - 1))
-    }, 8000)
+    if (pipelineStarted.current) return
+    pipelineStarted.current = true
 
-    async function run() {
+    const supabase = createClient()
+    let pollInterval: ReturnType<typeof setInterval>
+
+    async function start() {
+      // ── Load competitors ───────────────────────────────────────────────────
+      const { data: rows, error: compErr } = await supabase
+        .from('competitors')
+        .select('id, url, name')
+        .order('slot_number')
+
+      if (compErr || !rows || rows.length === 0) {
+        setError('No competitors found. Please go back to Step 2.')
+        return
+      }
+
+      const ids = rows.map(r => r.id)
+
+      // Initialise all as pending
+      setCompetitors(rows.map(r => ({
+        id: r.id,
+        url: r.url,
+        name: r.name,
+        scrapeStatus: 'pending',
+      })))
+
+      // ── Poll the DB every 3s for per-competitor progress ──────────────────
+      pollInterval = setInterval(async () => {
+        const [{ data: scrapeRows }, { data: insightRows }] = await Promise.all([
+          supabase
+            .from('scrape_results')
+            .select('entity_id, scrape_status')
+            .in('entity_id', ids)
+            .eq('entity_type', 'competitor'),
+          supabase
+            .from('ai_insights')
+            .select('competitor_id')
+            .in('competitor_id', ids),
+        ])
+
+        const scrapeMap = new Map(
+          (scrapeRows ?? []).map(r => [r.entity_id, r.scrape_status as string])
+        )
+        const insightSet = new Set((insightRows ?? []).map(r => r.competitor_id))
+
+        const updated: CompetitorStatus[] = rows.map(r => {
+          if (insightSet.has(r.id)) return { ...r, scrapeStatus: 'done' as const }
+          const scrape = scrapeMap.get(r.id)
+          if (scrape === 'failed')  return { ...r, scrapeStatus: 'failed' as const }
+          if (scrape === 'success') return { ...r, scrapeStatus: 'analysing' as const }
+          if (scrapeMap.has(r.id)) return { ...r, scrapeStatus: 'scraping' as const }
+          return { ...r, scrapeStatus: 'pending' as const }
+        })
+
+        setCompetitors(updated)
+
+        // All done when every competitor has insights
+        if (updated.every(c => c.scrapeStatus === 'done' || c.scrapeStatus === 'failed')) {
+          const anyDone = updated.some(c => c.scrapeStatus === 'done')
+          if (anyDone) {
+            clearInterval(pollInterval)
+            setDone(true)
+            setTimeout(() => router.push('/dashboard'), 1500)
+          }
+        }
+      }, 3000)
+
+      // ── Start the pipeline (runs while this page stays open) ──────────────
       try {
-        // ── 1. Run the pipeline ──────────────────────────────────────────────
         const res = await fetch('/api/pipeline', { method: 'POST' })
+        clearInterval(pollInterval)
+
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
           throw new Error(body.error ?? 'Pipeline failed')
         }
-        clearInterval(labelInterval)
 
-        // ── 2. Verify insights were actually written ─────────────────────────
-        setPhase('verifying')
-        const supabase = createClient()
+        // Do a final DB check after pipeline resolves
+        const [{ data: finalInsights }] = await Promise.all([
+          supabase.from('ai_insights').select('competitor_id').in('competitor_id', ids),
+        ])
 
-        const { data: competitors } = await supabase
-          .from('competitors')
-          .select('id')
+        const finalInsightSet = new Set((finalInsights ?? []).map(r => r.competitor_id))
 
-        if (!competitors || competitors.length === 0) {
-          throw new Error('No competitors found — please go back to Step 2.')
+        if (finalInsightSet.size === 0) {
+          throw new Error(
+            'Analysis completed but no insights were saved. ' +
+            'Check that FIRECRAWL_API_KEY and ANTHROPIC_API_KEY are set in your environment.'
+          )
         }
 
-        const competitorIds = competitors.map(c => c.id)
-        setTotalCount(competitorIds.length)
-
-        // Poll every 3s, up to 20 attempts (~60s) for at least one insight
-        let attempts = 0
-        const maxAttempts = 20
-
-        while (attempts < maxAttempts) {
-          const { count } = await supabase
-            .from('ai_insights')
-            .select('*', { count: 'exact', head: true })
-            .in('competitor_id', competitorIds)
-
-          const found = count ?? 0
-          setVerifiedCount(found)
-
-          if (found > 0) {
-            setPhase('done')
-            setTimeout(() => router.push('/dashboard'), 1500)
-            return
-          }
-
-          attempts++
-          await new Promise(r => setTimeout(r, 3000))
-        }
-
-        // Timed out — pipeline ran but no data written (likely missing API keys)
-        throw new Error(
-          'Analysis completed but no insights were saved. Please check that FIRECRAWL_API_KEY and ANTHROPIC_API_KEY are set in your Vercel environment variables.'
-        )
+        setCompetitors(rows.map(r => ({
+          ...r,
+          scrapeStatus: finalInsightSet.has(r.id) ? 'done' : 'failed',
+        })))
+        setDone(true)
+        setTimeout(() => router.push('/dashboard'), 1500)
 
       } catch (err) {
-        clearInterval(labelInterval)
+        clearInterval(pollInterval)
         setError(err instanceof Error ? err.message : 'Something went wrong')
-        setPhase('error')
       }
     }
 
-    run()
-    return () => clearInterval(labelInterval)
+    start()
+    return () => clearInterval(pollInterval)
   }, [router])
 
   // ── Error state ─────────────────────────────────────────────────────────────
-  if (phase === 'error') {
+  if (error) {
     return (
       <div className="text-center py-6">
         <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -108,10 +141,7 @@ export default function OnboardingStep3() {
         <h2 className="text-xl font-bold text-foreground mb-2">Something went wrong</h2>
         <p className="text-destructive text-sm mb-6 max-w-sm mx-auto leading-relaxed">{error}</p>
         <div className="flex gap-3 justify-center">
-          <Button
-            onClick={() => { setError(null); setPhase('pipeline'); setStepIdx(0); window.location.reload() }}
-            className="gap-2"
-          >
+          <Button onClick={() => window.location.reload()} className="gap-2">
             <RefreshCw className="w-4 h-4" />
             Try again
           </Button>
@@ -124,81 +154,105 @@ export default function OnboardingStep3() {
   }
 
   // ── Done state ──────────────────────────────────────────────────────────────
-  if (phase === 'done') {
+  if (done) {
     return (
       <div className="text-center py-6">
         <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 className="w-8 h-8 text-primary" />
         </div>
         <h2 className="text-xl font-bold text-foreground mb-2">Analysis complete!</h2>
-        <p className="text-muted-foreground text-sm">
-          Found insights for {verifiedCount} of {totalCount} competitor{totalCount !== 1 ? 's' : ''}.
-          Loading your dashboard…
-        </p>
+        <p className="text-muted-foreground text-sm">Loading your dashboard…</p>
       </div>
     )
   }
 
-  // ── Verifying state ─────────────────────────────────────────────────────────
-  if (phase === 'verifying') {
-    return (
-      <div className="text-center py-4">
-        <div className="relative w-20 h-20 mx-auto mb-6">
+  // ── Progress state ──────────────────────────────────────────────────────────
+  const total = competitors.length
+  const doneCount = competitors.filter(c => c.scrapeStatus === 'done').length
+
+  return (
+    <div className="py-2">
+      {/* Spinner + title */}
+      <div className="text-center mb-6">
+        <div className="relative w-16 h-16 mx-auto mb-4">
           <div className="absolute inset-0 rounded-full border-4 border-border" />
           <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
           <div className="absolute inset-0 flex items-center justify-center">
-            <ShieldCheck className="w-7 h-7 text-primary" />
+            <Globe className="w-6 h-6 text-primary" />
           </div>
         </div>
-        <h2 className="text-xl font-bold text-foreground mb-2">Confirming your data</h2>
-        <p className="text-primary text-sm font-medium mb-6">
-          Verifying insights for {totalCount} competitor{totalCount !== 1 ? 's' : ''}…
+        <h2 className="text-xl font-bold text-foreground mb-1">Analysing your competitors</h2>
+        <p className="text-muted-foreground text-sm">
+          {doneCount} of {total} complete — please keep this page open
         </p>
-        <Progress
-          value={totalCount > 0 ? (verifiedCount / totalCount) * 100 : 0}
-          className="h-1.5 mb-4"
-        />
-        <p className="text-muted-foreground text-xs">Almost there — hang tight</p>
-      </div>
-    )
-  }
-
-  // ── Pipeline running state ──────────────────────────────────────────────────
-  const StepIcon = PIPELINE_STEPS[stepIdx].icon
-  const progress = ((stepIdx + 1) / PIPELINE_STEPS.length) * 100
-
-  return (
-    <div className="text-center py-4">
-      <div className="relative w-20 h-20 mx-auto mb-6">
-        <div className="absolute inset-0 rounded-full border-4 border-border" />
-        <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <StepIcon className="w-7 h-7 text-primary" />
-        </div>
       </div>
 
-      <h2 className="text-xl font-bold text-foreground mb-2">Analysing your competitors</h2>
-      <p className="text-primary text-sm font-medium mb-6 min-h-[1.25rem] transition-all">
-        {PIPELINE_STEPS[stepIdx].text}
-      </p>
+      {/* Per-competitor status list */}
+      <div className="space-y-2">
+        {competitors.map(c => {
+          const hostname = (() => {
+            try { return new URL(c.url).hostname.replace('www.', '') }
+            catch { return c.url }
+          })()
 
-      <div className="space-y-3 mb-4">
-        <Progress value={progress} className="h-1.5" />
-        <div className="flex justify-between px-1">
-          {PIPELINE_STEPS.map((_, i) => (
+          return (
             <div
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${
-                i <= stepIdx ? 'bg-primary' : 'bg-border'
-              }`}
-            />
-          ))}
-        </div>
+              key={c.id}
+              className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-border bg-muted/20"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <StatusIcon status={c.scrapeStatus} />
+                <span className="text-sm text-foreground truncate font-medium">
+                  {c.name || hostname}
+                </span>
+                {!c.name && (
+                  <span className="text-xs text-muted-foreground truncate hidden sm:block">
+                    {hostname}
+                  </span>
+                )}
+              </div>
+              <StatusLabel status={c.scrapeStatus} />
+            </div>
+          )
+        })}
+
+        {/* Placeholder rows while competitors are loading */}
+        {competitors.length === 0 && (
+          Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-xl bg-muted/20 border border-border animate-pulse" />
+          ))
+        )}
       </div>
 
-      <p className="text-muted-foreground text-xs">
-        Please keep this page open — this may take up to 60 seconds per competitor
+      <p className="text-muted-foreground text-xs text-center mt-6">
+        This may take up to 60 seconds per competitor
       </p>
     </div>
   )
+}
+
+function StatusIcon({ status }: { status: CompetitorStatus['scrapeStatus'] }) {
+  switch (status) {
+    case 'done':
+      return <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+    case 'failed':
+      return <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+    case 'analysing':
+    case 'scraping':
+      return <Loader2 className="w-4 h-4 text-primary shrink-0 animate-spin" />
+    default:
+      return <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+  }
+}
+
+function StatusLabel({ status }: { status: CompetitorStatus['scrapeStatus'] }) {
+  const map: Record<CompetitorStatus['scrapeStatus'], { label: string; className: string }> = {
+    pending:   { label: 'Queued',     className: 'text-muted-foreground' },
+    scraping:  { label: 'Scraping…',  className: 'text-primary' },
+    analysing: { label: 'Analysing…', className: 'text-primary' },
+    done:      { label: 'Done',       className: 'text-primary font-medium' },
+    failed:    { label: 'Failed',     className: 'text-destructive' },
+  }
+  const { label, className } = map[status]
+  return <span className={`text-xs shrink-0 ${className}`}>{label}</span>
 }
