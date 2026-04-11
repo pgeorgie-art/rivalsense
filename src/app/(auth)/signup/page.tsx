@@ -3,6 +3,11 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle, CheckCircle2, Loader2, Mail } from 'lucide-react'
 
 export default function SignUpPage() {
   const [fullName, setFullName] = useState('')
@@ -18,7 +23,6 @@ export default function SignUpPage() {
     setLoading(true)
 
     const supabase = createClient()
-
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -40,19 +44,20 @@ export default function SignUpPage() {
 
   if (success) {
     return (
-      <div className="text-center">
-        <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
+      <div className="text-center py-4">
+        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Mail className="w-8 h-8 text-primary" />
         </div>
-        <h2 className="text-xl font-semibold text-white mb-2">Check your email</h2>
-        <p className="text-slate-400 text-sm">
-          We sent a confirmation link to <span className="text-blue-400">{email}</span>.
-          Click it to activate your account.
+        <h2 className="text-xl font-semibold text-foreground mb-2">Check your email</h2>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          We sent a confirmation link to{' '}
+          <span className="text-primary font-medium">{email}</span>.
+          <br />Click it to activate your account.
         </p>
-        <Link href="/login" className="mt-6 inline-block text-blue-400 hover:text-blue-300 text-sm font-medium">
-          Back to login →
+        <Link href="/login">
+          <Button variant="ghost" className="mt-6 text-primary">
+            Back to login →
+          </Button>
         </Link>
       </div>
     )
@@ -60,65 +65,74 @@ export default function SignUpPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-white mb-1">Create your account</h1>
-      <p className="text-slate-400 text-sm mb-6">Start tracking your competitors in minutes</p>
+      <h1 className="text-2xl font-bold text-foreground mb-1">Create your account</h1>
+      <p className="text-muted-foreground text-sm mb-6">
+        Start tracking your competitors in minutes
+      </p>
 
       <form onSubmit={handleSignUp} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1.5">Full name</label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="fullName">Full name</Label>
+          <Input
+            id="fullName"
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
             placeholder="Jane Smith"
-            className="w-full bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            autoComplete="name"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1.5">Email address</label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email address</Label>
+          <Input
+            id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             placeholder="jane@business.com"
-            className="w-full bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            autoComplete="email"
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
             placeholder="Min. 8 characters"
-            className="w-full bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            autoComplete="new-password"
           />
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors"
-        >
-          {loading ? 'Creating account...' : 'Create account'}
-        </button>
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating account…
+            </>
+          ) : (
+            'Create account'
+          )}
+        </Button>
       </form>
 
-      <p className="text-center text-slate-400 text-sm mt-6">
+      <p className="text-center text-muted-foreground text-sm mt-6">
         Already have an account?{' '}
-        <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium">
+        <Link href="/login" className="text-primary hover:text-primary/80 font-medium transition-colors">
           Sign in
         </Link>
       </p>

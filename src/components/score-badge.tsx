@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { BarChart2 } from 'lucide-react'
 
 function getScoreColor(score: number) {
-  if (score >= 70) return { ring: 'ring-blue-500', text: 'text-blue-400', bg: 'bg-blue-500' }
-  if (score >= 45) return { ring: 'ring-amber-500', text: 'text-amber-400', bg: 'bg-amber-500' }
-  return { ring: 'ring-red-500', text: 'text-red-400', bg: 'bg-red-500' }
+  if (score >= 70) return { ring: 'ring-blue-500',  text: 'text-blue-400',  dot: 'bg-blue-400'  }
+  if (score >= 45) return { ring: 'ring-amber-500', text: 'text-amber-400', dot: 'bg-amber-400' }
+  return              { ring: 'ring-red-500',   text: 'text-red-400',   dot: 'bg-red-400'   }
 }
 
 interface ScoreBadgeProps {
@@ -18,7 +19,6 @@ interface ScoreBadgeProps {
 }
 
 export default function ScoreBadge({ score, size = 'md', breakdown }: ScoreBadgeProps) {
-  const [showTooltip, setShowTooltip] = useState(false)
   const colors = getScoreColor(score)
 
   const sizeClasses = {
@@ -28,34 +28,42 @@ export default function ScoreBadge({ score, size = 'md', breakdown }: ScoreBadge
   }
 
   return (
-    <div className="relative inline-flex" onMouseEnter={() => setShowTooltip(true)} onMouseLeave={() => setShowTooltip(false)}>
-      <div className={`${sizeClasses[size]} rounded-full ring-2 ${colors.ring} bg-slate-800 flex flex-col items-center justify-center cursor-help`}>
-        <span className={`font-bold ${colors.text} leading-none`}>{score}</span>
-        <span className="text-slate-500 text-[10px] leading-none mt-0.5">/ 100</span>
-      </div>
-
-      {showTooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-slate-900 border border-slate-700 rounded-xl p-3 shadow-xl z-50 text-left">
-          <div className="flex items-center gap-1.5 mb-2">
-            <div className={`w-2 h-2 rounded-full ${colors.bg}`} />
-            <span className="text-white text-xs font-semibold">Market Positioning Score</span>
-          </div>
-          <p className="text-slate-400 text-xs mb-2">
-            Based on observable pricing and promotional activity only. Does <strong className="text-slate-300">not</strong> include revenue, customer volume, foot traffic, or review data.
-          </p>
-          {breakdown && (
-            <div className="space-y-1.5 border-t border-slate-700 pt-2">
-              {breakdown.pricing_notes && (
-                <p className="text-slate-400 text-xs">📊 {breakdown.pricing_notes}</p>
-              )}
-              {breakdown.promo_notes && (
-                <p className="text-slate-400 text-xs">🎯 {breakdown.promo_notes}</p>
-              )}
-            </div>
-          )}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-700" />
+    <Tooltip>
+      <TooltipTrigger>
+        <div
+          className={`${sizeClasses[size]} rounded-full ring-2 ${colors.ring} bg-card flex flex-col items-center justify-center cursor-help shrink-0`}
+        >
+          <span className={`font-bold ${colors.text} leading-none`}>{score}</span>
+          <span className="text-muted-foreground text-[10px] leading-none mt-0.5">/ 100</span>
         </div>
-      )}
-    </div>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="w-64 p-3 text-left">
+        <div className="flex items-center gap-1.5 mb-2">
+          <div className={`w-2 h-2 rounded-full ${colors.dot}`} />
+          <span className="text-xs font-semibold">Market Positioning Score</span>
+        </div>
+        <p className="text-muted-foreground text-xs mb-2">
+          Based on observable pricing and promotional activity only. Does{' '}
+          <strong className="text-foreground">not</strong> include revenue, customer volume,
+          foot traffic, or review data.
+        </p>
+        {breakdown && (breakdown.pricing_notes || breakdown.promo_notes) && (
+          <div className="space-y-1.5 border-t border-border pt-2">
+            {breakdown.pricing_notes && (
+              <p className="text-muted-foreground text-xs flex gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" />
+                {breakdown.pricing_notes}
+              </p>
+            )}
+            {breakdown.promo_notes && (
+              <p className="text-muted-foreground text-xs flex gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
+                {breakdown.promo_notes}
+              </p>
+            )}
+          </div>
+        )}
+      </TooltipContent>
+    </Tooltip>
   )
 }

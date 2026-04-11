@@ -3,35 +3,39 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle, Check, ArrowLeft, ArrowRight, Plus, X, Loader2 } from 'lucide-react'
 
 function StepIndicator({ current }: { current: number }) {
   return (
     <div className="flex items-center gap-2 mb-6">
       {[1, 2, 3].map((step) => (
         <div key={step} className="flex items-center gap-2">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-            step < current ? 'bg-blue-500 text-white' :
-            step === current ? 'bg-blue-600 text-white ring-2 ring-blue-400' :
-            'bg-slate-700 text-slate-400'
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
+            step < current
+              ? 'bg-primary text-primary-foreground'
+              : step === current
+              ? 'bg-primary text-primary-foreground ring-2 ring-primary/30 ring-offset-2 ring-offset-card'
+              : 'bg-muted text-muted-foreground'
           }`}>
-            {step < current ? (
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : step}
+            {step < current ? <Check className="w-3.5 h-3.5" /> : step}
           </div>
-          {step < 3 && <div className={`h-0.5 w-8 ${step < current ? 'bg-blue-500' : 'bg-slate-700'}`} />}
+          {step < 3 && (
+            <div className={`h-0.5 w-8 rounded-full transition-colors ${step < current ? 'bg-primary' : 'bg-border'}`} />
+          )}
         </div>
       ))}
-      <span className="ml-2 text-xs text-slate-400">Step {current} of 3</span>
+      <span className="ml-2 text-xs text-muted-foreground">Step {current} of 3</span>
     </div>
   )
 }
 
 function isValidUrl(url: string) {
   try {
-    const u = url.startsWith('http') ? url : 'https://' + url
-    new URL(u)
+    new URL(url.startsWith('http') ? url : 'https://' + url)
     return true
   } catch { return false }
 }
@@ -45,7 +49,6 @@ export default function OnboardingStep2() {
   const [loading, setLoading] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Load existing competitors if any
   useEffect(() => {
     async function load() {
       const supabase = createClient()
@@ -83,7 +86,6 @@ export default function OnboardingStep2() {
     const filled = slots.filter(s => s.trim())
     if (filled.length === 0) { setSaveError('Add at least 1 competitor URL'); return }
 
-    // Validate URLs
     const newErrors = slots.map(s => s.trim() && !isValidUrl(s) ? 'Invalid URL' : '')
     if (newErrors.some(Boolean)) { setErrors(newErrors); return }
 
@@ -92,7 +94,6 @@ export default function OnboardingStep2() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push('/login'); return }
 
-    // Delete existing competitors, re-insert fresh
     await supabase.from('competitors').delete().eq('user_id', user.id)
 
     const toInsert = filled.map((url, idx) => ({
@@ -113,65 +114,85 @@ export default function OnboardingStep2() {
     <>
       <StepIndicator current={2} />
       <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold text-white">Add competitors</h1>
-        <span className="text-sm font-medium text-blue-400">{filledCount}/{MAX_SLOTS} added</span>
+        <h1 className="text-2xl font-bold text-foreground">Add competitors</h1>
+        <Badge variant="secondary" className="text-primary">
+          {filledCount}/{MAX_SLOTS} added
+        </Badge>
       </div>
-      <p className="text-slate-400 text-sm mb-6">Add up to 5 competitor websites. We&apos;ll scrape and analyse them automatically.</p>
+      <p className="text-muted-foreground text-sm mb-6">
+        Add up to 5 competitor websites. We&apos;ll scrape and analyse them automatically.
+      </p>
 
       <form onSubmit={handleSubmit} className="space-y-3">
         {slots.map((url, idx) => (
-          <div key={idx} className="flex gap-2">
-            <div className="flex-1">
-              <div className="flex items-center bg-slate-700 border border-slate-600 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
-                <span className="px-3 text-slate-400 text-xs font-medium whitespace-nowrap border-r border-slate-600 py-2.5">
-                  Slot {idx + 1}
+          <div key={idx}>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center border border-input bg-input rounded-md overflow-hidden focus-within:ring-1 focus-within:ring-ring transition-shadow">
+                <span className="px-3 text-muted-foreground text-xs font-medium whitespace-nowrap border-r border-border py-2.5 bg-muted/30">
+                  {idx + 1}
                 </span>
                 <input
                   type="text"
                   value={url}
                   onChange={e => updateSlot(idx, e.target.value)}
                   placeholder="competitor-site.com"
-                  className="flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-slate-400 outline-none"
+                  className="flex-1 bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none"
                 />
               </div>
-              {errors[idx] && <p className="text-red-400 text-xs mt-1">{errors[idx]}</p>}
+              {slots.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeSlot(idx)}
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
-            {slots.length > 1 && (
-              <button type="button" onClick={() => removeSlot(idx)}
-                className="p-2.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+            {errors[idx] && (
+              <p className="text-destructive text-xs mt-1">{errors[idx]}</p>
             )}
           </div>
         ))}
 
         {slots.length < MAX_SLOTS && (
-          <button type="button" onClick={addSlot}
-            className="w-full border border-dashed border-slate-600 hover:border-blue-500 text-slate-400 hover:text-blue-400 rounded-lg py-2.5 text-sm transition-colors flex items-center justify-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addSlot}
+            className="w-full border-dashed gap-2 text-muted-foreground hover:text-foreground"
+          >
+            <Plus className="w-4 h-4" />
             Add another competitor
-          </button>
+          </Button>
         )}
 
         {saveError && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
-            <p className="text-red-400 text-sm">{saveError}</p>
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{saveError}</AlertDescription>
+          </Alert>
         )}
 
         <div className="flex gap-3 pt-2">
-          <button type="button" onClick={() => router.push('/onboarding/step-1')}
-            className="px-4 py-2.5 text-slate-400 hover:text-white border border-slate-600 hover:border-slate-500 rounded-lg text-sm transition-colors">
-            ← Back
-          </button>
-          <button type="submit" disabled={loading}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors">
-            {loading ? 'Saving...' : 'Start analysing →'}
-          </button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.push('/onboarding/step-1')}
+            className="gap-1.5"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </Button>
+          <Button type="submit" disabled={loading} className="flex-1 gap-1.5">
+            {loading ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+            ) : (
+              <>Start analysing <ArrowRight className="h-4 w-4" /></>
+            )}
+          </Button>
         </div>
       </form>
     </>

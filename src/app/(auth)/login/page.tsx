@@ -4,6 +4,11 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -32,57 +37,68 @@ export default function LoginPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-white mb-1">Welcome back</h1>
-      <p className="text-slate-400 text-sm mb-6">Sign in to your competitor intelligence dashboard</p>
+      <h1 className="text-2xl font-bold text-foreground mb-1">Welcome back</h1>
+      <p className="text-muted-foreground text-sm mb-6">
+        Sign in to your competitor intelligence dashboard
+      </p>
 
       <form onSubmit={handleLogin} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-1.5">Email address</label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="email">Email address</Label>
+          <Input
+            id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             placeholder="jane@business.com"
-            className="w-full bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            autoComplete="email"
           />
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-sm font-medium text-slate-300">Password</label>
-            <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link
+              href="/forgot-password"
+              className="text-xs text-primary hover:text-primary/80 transition-colors"
+            >
               Forgot password?
             </Link>
           </div>
-          <input
+          <Input
+            id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             placeholder="Your password"
-            className="w-full bg-slate-700 border border-slate-600 text-white placeholder-slate-400 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            autoComplete="current-password"
           />
         </div>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors"
-        >
-          {loading ? 'Signing in...' : 'Sign in'}
-        </button>
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Signing in…
+            </>
+          ) : (
+            'Sign in'
+          )}
+        </Button>
       </form>
 
-      <p className="text-center text-slate-400 text-sm mt-6">
+      <p className="text-center text-muted-foreground text-sm mt-6">
         Don&apos;t have an account?{' '}
-        <Link href="/signup" className="text-blue-400 hover:text-blue-300 font-medium">
+        <Link href="/signup" className="text-primary hover:text-primary/80 font-medium transition-colors">
           Create one free
         </Link>
       </p>
